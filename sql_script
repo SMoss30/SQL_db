@@ -1,0 +1,202 @@
+CREATE DATABASE swim_school;
+USE swim_school;
+
+
+CREATE TABLE children (
+member_id INT AUTO_INCREMENT PRIMARY KEY,
+forename VARCHAR (50) NOT NULL, 
+surname VARCHAR (50) NOT NULL,
+birth_date DATE,
+join_date DATE,
+age_at_join INT
+); 
+
+
+CREATE TABLE swim_stages (
+stage_number INT PRIMARY KEY, 
+level_name VARCHAR (10) UNIQUE,
+metre_distance INT,
+age_accessible INT NOT NULL
+); 
+
+
+CREATE TABLE progress (
+member_id INT,
+stage_number INT,
+cleared_initially BOOLEAN NULL DEFAULT FALSE, 
+next_stage INT,
+PRIMARY KEY (member_id, stage_number),
+FOREIGN KEY (member_id) REFERENCES children(member_id),
+FOREIGN KEY (stage_number) REFERENCES swim_stages(stage_number),
+FOREIGN KEY (next_stage) REFERENCES swim_stages(stage_number)
+);
+
+
+INSERT INTO children( member_id, forename, surname, birth_date, join_date, age_at_join)
+VALUES
+	(1001, "Alice", "Campbell", "2016-08-10", "2022-08-19", 6),
+    (1002, "Harry", "Johnson", "2018-11-22", "2023-01-04", 4),
+    (1003, "Josh", "Bradley", "2017-03-05", "2024-05-22", 7),
+    (1004, "Mary", "Jo", "2020-01-15", "2023-07-11", 3),
+    (1005, "Helen", "Hazelbea", "2019-06-09", "2022-12-02", 3),
+    (1006, "Beau", "Williams", "2021-04-30", "2024-03-15", 2),
+    (1007, "Brea", "Alexander", "2015-12-18", "2023-06-30", 7),
+    (1008, "Elena", "Abre", "2023-02-27", "2025-02-21", 1),
+    (1009, "Vivenne", "Valor", "2016-10-01", "2024-09-08", 7),
+    (1010, "Ben", "Chirstley", "2022-07-12", "2022-11-23", 0),
+    (1011, "Liam", "Baxter", "2014-06-15", "2016-06-15", 2),
+    (1012, "Jenny", "Baxter", "2014-06-15", "2016-06-15", 2) 
+    ;
+    
+INSERT INTO swim_stages( stage_number, level_name, metre_distance, age_accessible)
+VALUES
+	(1, "seahorse", 0, 0),
+	(2, "clownfish", 5, 3),
+	(3, "flounder", 10, 4),
+    (4, "crab", 15, 5),
+    (5, "turtle", 20, 6),
+    (6, "octopus", 25, 7),
+	(7, "crocodile", 50, 7),
+    (8, "dolphin", 100, 8),
+    (9, "whale", 200, 10)
+    ;
+    
+INSERT INTO progress (member_ID, stage_number, cleared_initially, next_stage)
+VALUES
+    (1001, 6, true, 7),
+    (1002, 5, true, 6),
+    (1003, 6, false, 7),
+    (1004, 4, true, 5),
+    (1005, 3, false, 4),
+    (1006, 3, false, 4),
+    (1007, 8, false, 9),
+    (1008, 1, true, 2),
+    (1009, 8, true, 9),
+    (1010, 1, true, 2),
+    (1011, 9, TRUE, NULL),
+    (1012, 9, FALSE, NULL)
+    ;
+
+-- ------------------------------------------------------------------
+
+/*
+ *Above is my database for a fictional swim school. It tracks childrens progress from
+ admission throughout the stages of the school. In order to ensure that the children 
+ move onto the next stage at an age appropriate time, it stores personal information such as
+ (membership id, full name, DOB, join date) the stages table then breaks down each stage
+ and which age it becomes accessible and the distance required to swim before achieving the level. 
+ The final table tracks the progress of the children, combining information from the previous 
+ two tables to store the current level of the children, their next level and whether they 
+ successfully passed the current level first time. 
+
+/*
+
+------------------------------------------------------------------------
+-- if you would like to see all details in the children table.
+-- SELECT * FROM children
+
+
+-- if you would like to see all details in the swim_stages table.
+-- SELECT * FROM swim_stages
+
+
+-- if you would like to see all details in the progress table.
+-- SELECT * FROM progress
+
+----------------------------------------------------------------------------
+ This query will retrive the children stage above 5 and order by acending age.
+
+SELECT 
+	c.member_id, c.forename, c.surname, c.birth_date, p.stage_number 
+FROM 
+	children AS c
+INNER JOIN
+	progress p ON c.member_id = p.member_id
+WHERE
+	p.stage_number > 5
+ORDER BY 
+	c.birth_date ASC
+;
+
+
+--------------------------------------------------------------------------------
+This query will retrive all children who are below stage 4 and in seahorse.
+
+SELECT 
+	c.member_id, c.forename, c.surname, p.stage_number, s.level_name
+FROM 
+	children AS c
+INNER JOIN
+	progress p ON c.member_id = p.member_id
+INNER JOIN
+	swim_stages s ON p.stage_number = s.stage_number
+WHERE
+	p.stage_number < 4 AND s.level_name = "seahorse"
+ORDER BY 
+	c.surname DESC
+    ;
+    
+-------------------------------------------------------------------------
+-- this query with show which levels currently have fewer than 2 students 
+
+SELECT level_name, COUNT(*) AS num_students
+FROM progress p
+JOIN swim_stages s ON p.stage_number = s.stage_number
+GROUP BY s.level_name
+HAVING COUNT(*) < 2
+;
+
+
+------------------------------------------------------------------------------
+-- the below will create a procedure which will delete a student once they have reached the final stage.
+
+DELIMITER //
+
+CREATE PROCEDURE delete_student_if_final_stage(IN student_id INT)
+BEGIN
+	DECLARE reached_final_stage BOOLEAN DEFAULT FALSE;
+    
+    SELECT EXISTS(
+		SELECT 1
+        FROM progress
+        WHERE member_id = student_id AND stage_number = 9
+	) INTO reached_final_stage;
+    
+IF reached_final_stage THEN
+	DELETE FROM progress 
+    WHERE member_id = student_id;
+    DELETE FROM children 
+    where member_id = student_id
+    ;
+    
+    SELECT CONCAT("student", student_id, "deleted as final stage reached.") AS message; 
+    ELSE
+    SELECT CONCAT("student", student_id, "NOT deleted. Final stage not reached.");
+    END IF;
+    END;
+    //
+
+DELIMITER ;
+
+-- this will retrieve all of the students who have reached the final 2 stages. 
+Once you have the member ID, you call call the procedure to delete students in the final stage. 
+
+SELECT 
+	c.member_id, UPPER(c.forename), LOWER(c.surname), c.birth_date, p.stage_number 
+FROM 
+	children AS c
+INNER JOIN
+	progress p ON c.member_id = p.member_id
+WHERE p.stage_number > 7
+ORDER BY 
+	p.stage_number ASC
+;
+
+--------------------------------------------------------------------------
+please use the below to call the above proceduce once you have retrieved the id above.
+if you attempt to delete a student who hasn't reached the final stage, it will not allow you to.
+-- CALL delete_student_if_final_stage()
+;
+
+--END
+/*
